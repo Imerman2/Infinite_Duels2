@@ -1,0 +1,185 @@
+import pygame
+import sys
+
+
+# Colors
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+RED = (255, 0, 0) 
+ORANGE = (255, 165, 0)
+YELLOW = (255, 255, 0)
+GREEN = (0, 255, 0)
+BLUE = (0, 0, 255)
+VIOLET = (127, 0, 255)
+GRAY = (150, 150, 150) # Example hero color
+LIGHT_GRAY = (200, 200, 200)
+
+#Dropdown class for user input
+class Dropdown:
+    def __init__(self, x, y, width, height, options, label):
+        self.rect = pygame.Rect(x, y, width, height)
+        self.options = options
+        self.label = label
+        self.current_option = options[0] # Index of selected options
+        self.expanded = False
+        self.font = pygame.font.Font(None, 18)
+        self.label_surface = self.font.render(label, True, BLACK)
+
+    def draw(self, screen):
+        #label
+        screen.blit(self.label_surface, (self.rect.x, self.rect.y + 25))
+        #main box
+        pygame.draw.rect(screen, WHITE, self.rect)
+        pygame.draw.rect(screen, BLACK, self.rect, 2)
+        #current selection
+        text = self.font.render(str(self.current_option), True, BLACK)
+        screen.blit(text, (self.rect.x + 5, self.rect.y + 5))
+        #The expanded dropdown
+        if self.expanded:
+            for i, option in enumerate(self.options):
+                rect = pygame.Rect(self.rect.x, self.rect.y + (i + 1) * self.rect.height, self.rect.width, self.rect.height)
+                pygame.draw.rect(screen, LIGHT_GRAY, rect)
+                pygame.draw.rect(screen, RED, rect, 1)
+                text = self.font.render(str(option), True, BLACK)
+                screen.blit(text, (rect.x + 5, rect.y + 5))
+
+    # What happens on dropdown clicks
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            # clicks on dropdowns expand them
+            if self.rect.collidepoint(event.pos):
+                self.expanded = not self.expanded
+            # clicks on things in the expanded dropdown list change the option and close the dropdown
+            elif self.expanded:
+                for i, option in enumerate(self.options):
+                    rect = pygame.Rect(self.rect.x, self.rect.y + (i + 1) * self.rect.height, self.rect.width, self.rect.height)
+                    if rect.collidepoint(event.pos):
+                        self.current_option = option
+                        self.expanded = False
+
+# Team Configuration for dynamically adjusting number of teams and players per team
+class TeamConfig:
+    def __init__(self, num_teams, players_per_team):
+        self.num_teams = num_teams
+        self.players_per_team = players_per_team
+        self.teams = []
+        for _ in range (num_teams):
+            team = {
+                "heroes": [None] * players_per_team,
+                "spawns": [None] * players_per_team
+            }
+            self.teams.append(team)
+
+    #The part that updates as inputs are made         
+    def update_team_size(self, num_teams, players_per_team):
+        self.num_teams = num_teams
+        self.players_per_team = players_per_team
+        new_teams = []
+        for i in range(num_teams):
+            if i < len(self.teams):
+                # Preserve the existing date.  Truncate and pad as necessary
+                old_team = self.teams[i]
+                heroes = old_team["heroes"] + [None] * max(0, players_per_team - len(old_team["heroes"]))
+                spawns = old_team["spawns"] + [None] * max(0, players_per_team - len(old_team["spawns"]))
+                new_teams.append({
+                    "heroes": heroes[:players_per_team] ,
+                    "spawns": spawns[:players_per_team]
+                })
+            else:
+                new_teams.append({
+                    "heroes": [None] * players_per_team,
+                    "spawns": [None] * players_per_team
+                })
+            self.teams = new_teams
+        
+
+# Hero and Spawn data
+hero_options = ["Aquilan Tempest", 
+                "Urik Ra", 
+                "Urik La", 
+                "Aquilan Shield Technician", 
+                "Apollonian Tank", 
+                "Apollonian Swordmaster"
+                ]
+team_options = [2, 3, 4]
+
+spawn_options = ["(2,3)", 
+                 "(2,13)", 
+                 "(22,3)", 
+                 "(22,13)"
+                 ]
+
+# Team Selector Class from Grok with heroes option removed
+class TeamSelector:
+    def __init__(self):
+        self.screen = pygame.display.set_mode((800, 600))
+        self.config = TeamConfig(num_teams = 2, players_per_team = 2)
+        self.dropdowns = {
+            "num_teams": Dropdown(50, 0, 50, 20, team_options, "# of Teams"),
+            "players_per_team": Dropdown(50, 100, 50, 20, spawn_options, "Players Per Team"),
+            "spawns": [],
+            "heroes": []
+        }
+        self.update_dropdowns()
+
+    def update_dropdowns(self):
+        # update dropdown selections to reflect team number and size
+        self.dropdowns["spawns"].clear()
+        y_offset = 150
+        for team_idx, team in enumerate(self.config.teams):
+            spawn_dropdowns = []
+            for player_idx in range(self.config.players_per_team): 
+                spawn_dd = Dropdown(50 + team_idx * 200, y_offset + player_idx * 50, 50, 20, spawn_options, f"Team {team_idx + 1 } Spawn {player_idx + 1}")
+
+                # Restore Old Selections if they exist
+                if team["spawns"][player_idx] in spawn_options:
+                    spawn_dd.current_option = team["spawns"][player_idx]
+                spawn_dropdowns.append(spawn_dropdowns)
+            self.dropdowns["spawns"].append(spawn_dropdowns)
+
+
+    def handle_event(self, event):
+        for dd in [self.dropdowns["num_teams"], self.dropdowns["players_per_team"]]:
+            dd.handle_event(event)
+        num_teams = int(self.dropdowns["num_teams"].selected or "2")
+        players_per_team = int(self.dropdowns["players_per_team"].selected or "2")
+
+        if num_teams != self.config.num_teams or players_per_team != self.config.players_per_team:
+            self.config.update_team_size(num_teams, players_per_team)
+            self.update.dropdowns()
+
+        for team_idx, spawn_dds in enumerate(self.dropdowns["spawns"]):
+            for player_idx, spawn_dd in enumerate(spawn_dds):
+                spawn_dd.handle_event(event)
+                self.config.teams[team_idx]["spawns"][player_idx] = spawn_dd.selected
+        
+    def draw(self):
+        self.screen.fill((255,255,255))
+        for dd in [self.dropdowns["num_teams"], self.dropdowns["players_per_team"]]:
+            dd.draw(self.screen)
+        for hero_dds in self.dropdowns["heroes"]:
+            for dd in hero_dds:
+                dd.draw(self.screen)
+        for spawn_dds in self.dropdowns["spawns"]:
+            for dd in spawn_dds:
+                dd.draw(self.screen)
+        pygame.display.flip()
+    
+    def run(self):
+        running = True
+        while running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                self.handle_event(event)
+            self.draw()
+        pygame.quit()
+
+if __name__ == "__main__":
+    pygame.init()
+    selector = TeamSelector()
+    selector.run()
+
+
+
+
